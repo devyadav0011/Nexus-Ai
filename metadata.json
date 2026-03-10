@@ -1,0 +1,8 @@
+{
+  "name": "Nexus AI Assistant",
+  "description": "An advanced AI voice assistant with simulated PC control, emotion and gesture recognition, and a live coding assistant.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}

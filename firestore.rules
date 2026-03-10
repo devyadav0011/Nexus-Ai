@@ -1,0 +1,83 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - uid: string (required, immutable) - User's ID
+    //   - email: string (required, immutable) - User's email
+    //   - displayName: string (optional) - User's name
+    //   - role: string (required) - 'admin' or 'user'
+    //   - createdAt: timestamp (required, immutable) - Creation time
+    //
+    // Collection: chats
+    // Document ID: {chatId}
+    // Fields:
+    //   - userId: string (required, immutable) - Owner's ID
+    //   - title: string (optional) - Chat title
+    //   - messages: string (required) - JSON stringified messages
+    //   - createdAt: timestamp (required, immutable) - Creation time
+    //
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "devy19372@gmail.com" && request.auth.token.email_verified == true));
+    }
+    function hasOnlyAllowedFields(allowedFields) {
+      return request.resource.data.keys().hasOnly(allowedFields);
+    }
+    
+    // Domain Validators
+    function isValidUser() {
+      return hasOnlyAllowedFields(['uid', 'email', 'displayName', 'role', 'createdAt']) &&
+        request.resource.data.uid is string && request.resource.data.uid.size() > 0 && request.resource.data.uid.size() < 128 &&
+        request.resource.data.email is string && request.resource.data.email.size() > 0 && request.resource.data.email.size() < 256 &&
+        (!('displayName' in request.resource.data) || (request.resource.data.displayName is string && request.resource.data.displayName.size() < 100)) &&
+        request.resource.data.role in ['admin', 'user'] &&
+        request.resource.data.createdAt is timestamp;
+    }
+    
+    function isValidChat() {
+      return hasOnlyAllowedFields(['userId', 'title', 'messages', 'createdAt']) &&
+        request.resource.data.userId is string && request.resource.data.userId.size() > 0 && request.resource.data.userId.size() < 128 &&
+        (!('title' in request.resource.data) || (request.resource.data.title is string && request.resource.data.title.size() < 200)) &&
+        request.resource.data.messages is string && request.resource.data.messages.size() < 500000 &&
+        request.resource.data.createdAt is timestamp;
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isAuthenticated() && isOwner(userId) && isValidUser() && 
+                    ((request.resource.data.role == 'user') || isAdmin()) &&
+                    request.resource.data.uid == request.auth.uid;
+      allow update: if isAuthenticated() && isOwner(userId) && isValidUser() && 
+                    ((request.resource.data.role == resource.data.role) || isAdmin()) &&
+                    request.resource.data.uid == resource.data.uid &&
+                    request.resource.data.email == resource.data.email &&
+                    request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isAdmin();
+    }
+
+    match /chats/{chatId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid && isValidChat();
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid && 
+                    request.resource.data.userId == resource.data.userId && isValidChat() &&
+                    request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+  }
+}
