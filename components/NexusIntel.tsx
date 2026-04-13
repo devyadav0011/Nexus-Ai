@@ -32,7 +32,7 @@ export default function NexusIntel() {
           },
         });
       } else {
-        // Get user location for maps grounding if possible
+        
         let latLng = undefined;
         try {
           const position = await new Promise<GeolocationPosition>((resolve, reject) => {
